@@ -115,7 +115,67 @@ class Runner:
             task = DownloadServer.taskQueue.get()
             print('Handle: "%s"' % task['fileName'])
             self.taskDispatcher.dispatch(**task)
+# For Only WeTV Global (Subtitle changed from webvtt to srt, just remove webvtt header)
+# Just Remove webvtt header until "1"
+def vtt_to_srt(self, vttFile):
+    myFile = open(vttFile, 'r')
+    vttfile = myFile.readlines()
+    myFile.close()
 
+    for i in range(0,15):
+        if ( vttfile[i].startswith('1') ):
+            break
+        vttfile[i]=''
+
+    srtFileName = vttFile.replace(".vtt",".srt")
+    srtFile = open(srtFileName, 'a')
+    srtFile.writelines(vttfile)
+    srtFile.close()
+
+def handleSubtitles(self, subtitles, fileName, videoName, headers = {}):
+    print("-- dispatcher/handleSubtitles")
+    subtitleUrls, subtitleNames = [], []
+    subtitlesInfo = []
+    # For WeTV subtitle file process ( .vtt to .srt )
+    subtitleNames1, subtitlesInfo1 = [], []
+
+    for name, url in subtitles:
+        # remove .m3u8 from subtitle url
+        url = url.replace(".m3u8","")
+        subtitleUrls.append(url)
+        subtitleName = tools.join(self.tempFilePath, '%s_%s%s' % \
+            (fileName, name, tools.getSuffix(url)))
+        subtitleNames1.append(subtitleName)
+        subtitlesInfo1.append((name, subtitleName))
+
+    self.downloader.downloadAll(subtitleUrls, subtitleNames1, headers, self.hlsThreadCnt)
+
+    for each in subtitleNames1:
+        # IF subtitle name is .vtt (This is WeTV)
+        if ( ".vtt" in each ):
+            # Convert vtt to srt
+            self.vtt_to_srt(each)
+            # subtitle name extension change from vtt to srt
+            each = each.replace(".vtt",".srt")
+            subtitleNames.append(each)
+            tools.tryFixSrtFile(each)
+            # for delete vtt file
+            each = each.replace(".srt",".vtt")
+            os.remove(each)
+        else:
+            subtitleNames.append(each)
+            tools.tryFixSrtFile(each)
+
+    for name1, each1 in subtitlesInfo1:
+        # IF subtitle name is .vtt (This is WeTV)
+        if ( ".vtt" in each1 ):
+            # subtitle name extension change from vtt to srt
+            each1 = each1.replace(".vtt",".srt")
+        subtitlesInfo.append((name1, each1))
+
+    targetFileName = tools.integrateSubtitles(subtitlesInfo, videoName)
+    self.saveTempFile or tools.removeFiles(subtitleNames)
+    return targetFileName
 
 
 if __name__ == '__main__':
